@@ -200,6 +200,69 @@ func TestBuildPostHogProbeURL(t *testing.T) {
 	assert.Equal(t, "https://us.posthog.com/api/organizations/@current/", probeURL)
 }
 
+func TestBuildOnePasswordProbeURL(t *testing.T) {
+	t.Parallel()
+
+	t.Run(
+		"client credentials ask the users api of their region",
+		func(t *testing.T) {
+			t.Parallel()
+
+			conn := &coredata.Connector{
+				Provider: coredata.ConnectorProviderOnePassword,
+				Connection: &connectorprotocol.OAuth2Connection{
+					GrantType: connectorprotocol.OAuth2GrantTypeClientCredentials,
+				},
+			}
+			require.NoError(
+				t,
+				conn.SetSettings(
+					&coredata.OnePasswordUsersAPISettings{
+						AccountID: "WX52YXL2MVEPBK43P3R4XMWKXI",
+						Region:    "ENT",
+					},
+				),
+			)
+
+			probeURL, err := buildOnePasswordProbeURL(conn, Endpoints{})
+			require.NoError(t, err)
+			assert.Equal(t, "https://api.ent.1password.com/v1/accounts/WX52YXL2MVEPBK43P3R4XMWKXI/users?max_page_size=1", probeURL)
+		},
+	)
+
+	t.Run(
+		"api key asks the scim bridge",
+		func(t *testing.T) {
+			t.Parallel()
+
+			conn := &coredata.Connector{
+				Provider:   coredata.ConnectorProviderOnePassword,
+				Connection: &connectorprotocol.APIKeyConnection{APIKey: "scim-token"},
+			}
+			require.NoError(t, conn.SetSettings(&coredata.OnePasswordConnectorSettings{SCIMBridgeURL: "https://scim.example.test"}))
+
+			probeURL, err := buildOnePasswordProbeURL(conn, Endpoints{})
+			require.NoError(t, err)
+			assert.Equal(t, "https://scim.example.test/scim/v2/Users?count=1", probeURL)
+		},
+	)
+
+	t.Run(
+		"api key without a scim bridge",
+		func(t *testing.T) {
+			t.Parallel()
+
+			conn := &coredata.Connector{
+				Provider:   coredata.ConnectorProviderOnePassword,
+				Connection: &connectorprotocol.APIKeyConnection{APIKey: "scim-token"},
+			}
+
+			_, err := buildOnePasswordProbeURL(conn, Endpoints{})
+			require.Error(t, err)
+		},
+	)
+}
+
 func TestProbePostHog(t *testing.T) {
 	t.Parallel()
 
