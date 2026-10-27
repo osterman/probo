@@ -75,6 +75,7 @@ type (
 		// repoints the Linear Sync connector moves these calls too. See
 		// linear.NewClient.
 		linearAPIBaseURL       string
+		asanaAPIBaseURL        string
 		logger                 *log.Logger
 		recordUpdateActivities RecordUpdateActivitiesFunc
 		recordImportedTask     RecordImportedTaskFunc
@@ -99,6 +100,7 @@ func NewService(
 	connectorRegistry *connectorprotocol.Registry,
 	baseURL string,
 	linearAPIBaseURL string,
+	asanaAPIBaseURL string,
 	logger *log.Logger,
 	recordUpdateActivities RecordUpdateActivitiesFunc,
 	recordImportedTask RecordImportedTaskFunc,
@@ -110,6 +112,7 @@ func NewService(
 		connectorRegistry:      connectorRegistry,
 		baseURL:                baseURL,
 		linearAPIBaseURL:       linearAPIBaseURL,
+		asanaAPIBaseURL:        asanaAPIBaseURL,
 		logger:                 logger,
 		recordUpdateActivities: recordUpdateActivities,
 		recordImportedTask:     recordImportedTask,
@@ -568,6 +571,18 @@ func isLinearPublishComplete(link *coredata.TaskExternalLink) bool {
 	}
 
 	return payload.AttachmentID != ""
+}
+
+func isPublishComplete(link *coredata.TaskExternalLink) bool {
+	if link == nil || link.ExternalID == "" || isLinearPublishPending(link) {
+		return false
+	}
+
+	if link.Provider == coredata.ConnectorProviderAsana {
+		return true
+	}
+
+	return isLinearPublishComplete(link)
 }
 
 func reuseExistingLinearIssue(link *coredata.TaskExternalLink, teamID string) (bool, error) {
@@ -1435,6 +1450,7 @@ func (s *Service) enqueueOutboundTx(
 	payload, err := json.Marshal(
 		JobPayload{
 			Action:             action,
+			Provider:           link.Provider,
 			TaskID:             link.TaskID,
 			ExternalID:         link.ExternalID,
 			ExternalIdentifier: link.ExternalIdentifier,

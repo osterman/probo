@@ -75,7 +75,10 @@ export function CreateTaskDialogFallback({
         if (!skipLinear) {
           return;
         }
-        form.submit({ teamId: null, issueId: null });
+        form.submit({
+          linear: { teamId: null, issueId: null },
+          asana: { projectId: null, taskGid: null },
+        });
       }}
     />
   );

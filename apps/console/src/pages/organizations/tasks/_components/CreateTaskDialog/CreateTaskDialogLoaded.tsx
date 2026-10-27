@@ -25,6 +25,7 @@ import { graphql, usePreloadedQuery } from "react-relay";
 
 import type { CreateTaskDialogLoadedQuery } from "#/__generated__/core/CreateTaskDialogLoadedQuery.graphql";
 
+import { TaskAsanaDraftField } from "../TaskAsanaDraftField";
 import { TaskLinearDraftField } from "../TaskLinearDraftField";
 
 import { CreateTaskDialogFields } from "./CreateTaskDialogFields";
@@ -35,7 +36,10 @@ export const linearConnectionQuery = graphql`
     node(id: $organizationId) {
       __typename
       ... on Organization {
-        connectors(filter: { providers: [LINEAR_SYNC] }) {
+        linearConnectors: connectors(filter: { providers: [LINEAR_SYNC] }) {
+          __typename
+        }
+        asanaConnectors: connectors(filter: { providers: [ASANA] }) {
           __typename
         }
         linearSettings {
@@ -43,7 +47,13 @@ export const linearConnectionQuery = graphql`
             id
           }
         }
+        asanaSettings {
+          defaultProject {
+            id
+          }
+        }
         ...TaskLinearDraftField_organization
+        ...TaskAsanaDraftField_organization
       }
     }
   }
@@ -64,14 +74,20 @@ export function CreateTaskDialogLoaded({
     queryRef,
   );
   const organization = data.node?.__typename === "Organization" ? data.node : null;
-  const defaultTeamId = organization != null && organization.connectors.length > 0
+  const linearConnected = organization != null && organization.linearConnectors.length > 0;
+  const asanaConnected = organization != null && organization.asanaConnectors.length > 0;
+  const defaultTeamId = linearConnected
     ? (organization.linearSettings.defaultTeam?.id ?? null)
     : null;
+  const defaultProjectId = asanaConnected
+    ? (organization.asanaSettings.defaultProject?.id ?? null)
+    : null;
+  const linearTeamId = form.linear?.teamId ?? defaultTeamId;
 
   return (
     <CreateTaskDialogFields
       form={form}
-      linear={organization != null && organization.connectors.length > 0
+      linear={linearConnected
         ? (
             <Field label={t("detailsPage.fields.linear")}>
               <TaskLinearDraftField
@@ -83,10 +99,28 @@ export function CreateTaskDialogLoaded({
             </Field>
           )
         : null}
+      asana={asanaConnected
+        ? (
+            <Field label={t("detailsPage.fields.asana")}>
+              <TaskAsanaDraftField
+                organizationKey={organization}
+                disabled={form.isSaving || linearTeamId != null}
+                onChange={form.setAsana}
+                onTask={form.applyAsanaTask}
+              />
+            </Field>
+          )
+        : null}
       onSubmit={() => {
-        form.submit(form.linear ?? {
-          teamId: defaultTeamId,
-          issueId: null,
+        form.submit({
+          linear: form.linear ?? {
+            teamId: defaultTeamId,
+            issueId: null,
+          },
+          asana: form.asana ?? {
+            projectId: linearTeamId == null ? defaultProjectId : null,
+            taskGid: null,
+          },
         });
       }}
     />

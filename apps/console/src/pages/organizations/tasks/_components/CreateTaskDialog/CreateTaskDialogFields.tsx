@@ -55,6 +55,7 @@ import type { CreateTaskDialogFormState } from "./useCreateTaskDialogForm";
 export interface CreateTaskDialogFieldsProps {
   form: CreateTaskDialogFormState;
   linear: ReactNode;
+  asana?: ReactNode;
   submitDisabled?: boolean;
   onSubmit: () => void;
 }
@@ -62,6 +63,7 @@ export interface CreateTaskDialogFieldsProps {
 export function CreateTaskDialogFields({
   form,
   linear,
+  asana,
   submitDisabled,
   onSubmit,
 }: CreateTaskDialogFieldsProps) {
@@ -192,6 +194,7 @@ export function CreateTaskDialogFields({
           </SelectPopup>
         </Select>
         {linear}
+        {asana}
       </DialogBody>
       <DialogFooter>
         <DialogClose

@@ -72,6 +72,7 @@ export function useCreateTask() {
       priority: TaskPriority;
       internalControlIds?: readonly string[] | null;
       linearTeamId?: string | null;
+      asanaProjectId?: string | null;
     },
     connectionId?: string,
   ) {
@@ -113,6 +114,9 @@ export function useCreateTask() {
           internalControlIds: internalControlIds.length > 0 ? [...internalControlIds] : undefined,
           ...(input.linearTeamId !== undefined
             ? { linearTeamId: input.linearTeamId }
+            : {}),
+          ...(input.asanaProjectId !== undefined
+            ? { asanaProjectId: input.asanaProjectId }
             : {}),
         },
       },

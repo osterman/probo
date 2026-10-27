@@ -24,12 +24,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { graphql } from "react-relay";
 
+import type { useCreateTaskDialogFormAsanaLinkMutation } from "#/__generated__/core/useCreateTaskDialogFormAsanaLinkMutation.graphql";
+import type { useCreateTaskDialogFormAsanaPublishMutation } from "#/__generated__/core/useCreateTaskDialogFormAsanaPublishMutation.graphql";
 import type { useCreateTaskDialogFormLinkMutation } from "#/__generated__/core/useCreateTaskDialogFormLinkMutation.graphql";
 import type { useCreateTaskDialogFormPublishMutation } from "#/__generated__/core/useCreateTaskDialogFormPublishMutation.graphql";
 import { useMutation } from "#/lib/relay/useMutation";
 import { isRichEditorContentEmpty } from "#/pages/organizations/_lib/richEditorContent";
 
 import { useCreateTask } from "../../_lib/useCreateTask";
+import type { AsanaDraft } from "../TaskAsanaDraftField";
 import type { LinearDraft, LinearIssueDraft } from "../TaskLinearDraftField";
 
 const publishMutation = graphql`
@@ -54,6 +57,28 @@ const linkMutation = graphql`
   }
 `;
 
+const asanaPublishMutation = graphql`
+  mutation useCreateTaskDialogFormAsanaPublishMutation($input: PublishTaskToAsanaInput!) {
+    publishTaskToAsana(input: $input) {
+      task {
+        id
+        ...TaskListItem_task
+      }
+    }
+  }
+`;
+
+const asanaLinkMutation = graphql`
+  mutation useCreateTaskDialogFormAsanaLinkMutation($input: LinkTaskToAsanaInput!) {
+    linkTaskToAsana(input: $input) {
+      task {
+        ...TaskDetailsPage_task
+        ...TaskListItem_task
+      }
+    }
+  }
+`;
+
 export interface CreateTaskDialogSessionProps {
   connectionId?: string;
   internalControlId?: string;
@@ -69,6 +94,7 @@ export interface CreateTaskDialogFormState {
   state: TaskState;
   priority: TaskPriority;
   linear: LinearDraft | null;
+  asana: AsanaDraft | null;
   uploading: boolean;
   isSaving: boolean;
   setName: (value: string) => void;
@@ -77,10 +103,12 @@ export interface CreateTaskDialogFormState {
   setState: (state: TaskState) => void;
   setPriority: (priority: TaskPriority) => void;
   setLinear: (selection: LinearDraft) => void;
+  setAsana: (selection: AsanaDraft) => void;
   setUploading: (uploading: boolean) => void;
   applyLinearIssue: (issue: LinearIssueDraft) => void;
+  applyAsanaTask: (task: { name: string }) => void;
   reset: () => void;
-  submit: (selection: LinearDraft) => void;
+  submit: (selection: { linear: LinearDraft; asana: AsanaDraft }) => void;
 }
 
 export function useCreateTaskDialogForm({
@@ -99,6 +127,7 @@ export function useCreateTaskDialogForm({
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
   const [createTask, isCreating] = useCreateTask();
   const [linear, setLinearState] = useState<LinearDraft | null>(null);
+  const [asana, setAsanaState] = useState<AsanaDraft | null>(null);
   const [publish, isPublishing] = useMutation<useCreateTaskDialogFormPublishMutation>(
     publishMutation,
     {
@@ -113,7 +142,21 @@ export function useCreateTaskDialogForm({
       errorToast: t("detailsPage.linear.errors.link"),
     },
   );
-  const isSaving = isCreating || isPublishing || isLinking;
+  const [publishAsana, isPublishingAsana] = useMutation<useCreateTaskDialogFormAsanaPublishMutation>(
+    asanaPublishMutation,
+    {
+      successMessage: t("detailsPage.asana.published"),
+      errorToast: t("detailsPage.asana.errors.publish"),
+    },
+  );
+  const [linkAsana, isLinkingAsana] = useMutation<useCreateTaskDialogFormAsanaLinkMutation>(
+    asanaLinkMutation,
+    {
+      successMessage: t("detailsPage.asana.linked"),
+      errorToast: t("detailsPage.asana.errors.link"),
+    },
+  );
+  const isSaving = isCreating || isPublishing || isLinking || isPublishingAsana || isLinkingAsana;
 
   function applyLinearIssue(issue: LinearIssueDraft) {
     setName(clampUtf8(issue.title.trim(), taskNameMaxLength));
@@ -128,6 +171,11 @@ export function useCreateTaskDialogForm({
     setErrors({});
   }
 
+  function applyAsanaTask(task: { name: string }) {
+    setName(clampUtf8(task.name.trim(), taskNameMaxLength));
+    setErrors({});
+  }
+
   function reset() {
     setName("");
     setContent("");
@@ -136,10 +184,11 @@ export function useCreateTaskDialogForm({
     setState("TODO");
     setPriority("MEDIUM");
     setLinearState(null);
+    setAsanaState(null);
     setUploading(false);
   }
 
-  function submit(linearSelection: LinearDraft) {
+  function submit(selection: { linear: LinearDraft; asana: AsanaDraft }) {
     if (uploading) {
       return;
     }
@@ -159,19 +208,20 @@ export function useCreateTaskDialogForm({
         priority,
         internalControlIds: internalControlId ? [internalControlId] : undefined,
         linearTeamId: null,
+        asanaProjectId: null,
       },
       connectionId,
     ).then(
       async (taskId) => {
         try {
-          if (linearSelection.teamId != null) {
-            if (linearSelection.issueId != null) {
+          if (selection.linear.teamId != null) {
+            if (selection.linear.issueId != null) {
               await link({
                 variables: {
                   input: {
                     taskId,
-                    teamId: linearSelection.teamId,
-                    issueId: linearSelection.issueId,
+                    teamId: selection.linear.teamId,
+                    issueId: selection.linear.issueId,
                   },
                 },
               });
@@ -180,14 +230,35 @@ export function useCreateTaskDialogForm({
                 variables: {
                   input: {
                     taskId,
-                    teamId: linearSelection.teamId,
+                    teamId: selection.linear.teamId,
+                  },
+                },
+              });
+            }
+          } else if (selection.asana.projectId != null) {
+            if (selection.asana.taskGid != null) {
+              await linkAsana({
+                variables: {
+                  input: {
+                    taskId,
+                    projectId: selection.asana.projectId,
+                    taskGid: selection.asana.taskGid,
+                  },
+                },
+              });
+            } else {
+              await publishAsana({
+                variables: {
+                  input: {
+                    taskId,
+                    projectId: selection.asana.projectId,
                   },
                 },
               });
             }
           }
         } catch {
-          // The task exists; the Linear toast already explains the failure.
+          // The task exists; the publish toast already explains the failure.
         }
         reset();
         onClose();
@@ -207,6 +278,7 @@ export function useCreateTaskDialogForm({
     state,
     priority,
     linear,
+    asana,
     uploading,
     isSaving,
     setName,
@@ -215,8 +287,10 @@ export function useCreateTaskDialogForm({
     setState,
     setPriority,
     setLinear: setLinearState,
+    setAsana: setAsanaState,
     setUploading,
     applyLinearIssue,
+    applyAsanaTask,
     reset,
     submit,
   };
